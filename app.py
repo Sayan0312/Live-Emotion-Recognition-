@@ -5,63 +5,53 @@ from tensorflow.keras.models import load_model
 from PIL import Image
 
 # ----------------------------
-# Load your trained emotion model
+# Load model
 # ----------------------------
-model = load_model('emotion_model.h5')  # replace with your model path
-emotion_dict = {0: "Angry", 1: "Disgust", 2: "Fear", 3: "Happy", 
-                4: "Sad", 5: "Surprise", 6: "Neutral"}  # adjust as per your model
+model = load_model("emotion_model.h5")
 
-# ----------------------------
-# Streamlit UI
-# ----------------------------
-st.title("Live Emotion Recognition")
-
-# Option to use webcam
-run = st.checkbox('Start Camera')
-
-FRAME_WINDOW = st.image([])  # placeholder for video frames
+emotion_dict = {
+    0: "Angry",
+    1: "Disgust",
+    2: "Fear",
+    3: "Happy",
+    4: "Sad",
+    5: "Surprise",
+    6: "Neutral"
+}
 
 # Load face detector
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+face_cascade = cv2.CascadeClassifier(
+    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+)
+
+st.title("Live Emotion Recognition")
 
 # ----------------------------
-# Function to process each frame
+# Camera input (Streamlit Cloud safe)
 # ----------------------------
+img = st.camera_input("Capture Image")
+
 def process_frame(frame):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-    
+
     for (x, y, w, h) in faces:
-        roi_gray = gray[y:y+h, x:x+w]
-        roi_gray = cv2.resize(roi_gray, (48, 48))  # model input size
-        roi_gray = roi_gray.astype('float')/255.0
-        roi_gray = np.expand_dims(roi_gray, axis=0)
-        roi_gray = np.expand_dims(roi_gray, axis=-1)
+        roi = gray[y:y+h, x:x+w]
+        roi = cv2.resize(roi, (48, 48))
+        roi = roi / 255.0
+        roi = roi.reshape(1, 48, 48, 1)
 
-        # Predict emotion
-        prediction = model.predict(roi_gray)
-        max_index = int(np.argmax(prediction))
-        emotion = emotion_dict[max_index]
+        prediction = model.predict(roi)
+        emotion = emotion_dict[np.argmax(prediction)]
 
-        # Draw rectangle and label on original frame
-        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-        cv2.putText(frame, emotion, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 
-                    0.9, (36,255,12), 2)
+        cv2.rectangle(frame, (x, y), (x+w, y+h), (0,255,0), 2)
+        cv2.putText(frame, emotion, (x, y-10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
+
     return frame
 
-# ----------------------------
-# Start webcam feed
-# ----------------------------
-if run:
-    cap = cv2.VideoCapture(0)
-    while run:
-        ret, frame = cap.read()
-        if not ret:
-            st.warning("Failed to access webcam.")
-            break
-
-        frame = cv2.flip(frame, 1)  # mirror the frame
-        frame = process_frame(frame)
-        FRAME_WINDOW.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-
-    cap.release()
+if img:
+    image = Image.open(img)
+    frame = np.array(image)
+    frame = process_frame(frame)
+    st.image(frame, channels="RGB")
